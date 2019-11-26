@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html>
+  <head>
+   <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+    <title>BlockLike.js With Legra.js</title>
+    <style>
+      .status {
+        text-align: center;
+        line-height: 30px;
+        font-family: monospace;
+        color: #eee;
+      }
+      .instructions {
+        text-align: center;
+        line-height: 50px;
+        font-family: monospace;
+      }
+    </style>
+  </head>
+  <body>
+
+  <script src="https://cdn.jsdelivr.net/npm/blocklike@1.0.0/dist/blocklike-1.0.0.min.js"></script>
+  <script src="https://unpkg.com/legra?browser"></script>
+
+  <script id="example">
+/* global legra */
+
+// setup
+const brickSize = 24;
+
+const stage = new blockLike.Stage({ sensing: true });
+stage.css('cursor', 'crosshair');
+
+const status = new blockLike.Sprite({
+  costume: new blockLike.Costume({
+    width: 150,
+    height: 30,
+    color: '#222',
+  }),
+});
+status.addClass('status');
+status.goTo(-(stage.width / 2) + 75, (stage.height / 2) - 15);
+
+const instructions = new blockLike.Sprite({
+  costume: new blockLike.Costume({
+    width: 300,
+    height: 50,
+    color: '#eee',
+  }),
+});
+
+const sprite = new blockLike.Sprite({
+  costume: new blockLike.Costume({
+    width: 2,
+    height: 2,
+  }),
+});
+sprite.draggable = false;
+sprite.css('border', '1px dotted #222');
+sprite.setPenColor('blue');
+status.inner('line blue');
+instructions.addClass('instructions');
+
+// intro
+let instruct = true;
+
+function runInstructions() {
+  while (instruct) {
+    instructions.inner('h for help');
+    this.wait(0.5);
+    instructions.inner('drag to build');
+    this.wait(1.5);
+    instructions.inner('esc to cancel');
+    this.wait(1.5);
+    instructions.inner('1 line, 2 rect, 3 ellipse');
+    this.wait(1.5);
+    instructions.inner('r red, g green, b blue');
+    this.wait(1.5);
+    instructions.inner('c cyan, m magenta, y yellow');
+    this.wait(1.5);
+    instructions.inner('p pink, k black, w white');
+    this.wait(1.5);
+    instructions.inner('space to clear');
+    this.wait(1.5);
+  }
+}
+
+stage.whenLoaded(() => {
+  sprite.addTo(stage);
+  instructions.addTo(stage);
+  status.addTo(stage);
+
+  stage.invoke(runInstructions);
+});
+
+stage.whenClicked(() => {
+  instructions.hide();
+  instruct = false;
+});
+
+// legra.js
+const le = new legra(stage.element.canvas.getContext('2d')); // eslint-disable-line new-cap
+le.rectangle(
+  0, 0, Math.round(stage.width / brickSize), Math.round(stage.height / brickSize),
+  { filled: true, color: 'lightgray' },
+);
+
+// globals
+let startX = 0;
+let startY = 0;
+let drawing = false;
+let shape = 'line';
+const filled = true;
+
+// utils
+function xToLeft(start, width) {
+  return startX + ((stage.width / 2) - (width / 2));
+}
+
+function yToTop(start, height) {
+  return -startY + ((stage.height / 2) - (height / 2));
+}
+
+// legra drawing
+function legraEllipse(x1, y1, x2, y2) {
+  le.ellipse(x1, y1, x2, y2, {
+    color: sprite.penColor,
+    filled,
+  });
+}
+
+function legraRect(x1, y1, x2, y2) {
+  le.rectangle(x1, y1, x2, y2, {
+    color: sprite.penColor,
+    filled,
+  });
+}
+
+function legraLine(x1, y1, x2, y2) {
+  le.line(x1, y1, x2, y2, {
+    color: sprite.penColor,
+  });
+}
+
+// mouse ui
+stage.whenEvent('mousedown', () => {
+  drawing = true;
+  startX = stage.mouseX;
+  startY = stage.mouseY;
+  sprite.x = startX;
+  sprite.y = startY;
+  sprite.refresh();
+});
+
+stage.whenEvent('mouseup', () => {
+  if (drawing) {
+    const x1 = Math.round(xToLeft(startX, sprite.width) / brickSize);
+    const y1 = Math.round(yToTop(startY, sprite.height) / brickSize);
+    const width = Math.round(sprite.width / brickSize);
+    const height = Math.round(sprite.height / brickSize);
+
+    if (shape === 'rect') {
+      legraRect(x1, y1, width, height);
+    }
+    if (shape === 'ellipse') {
+      legraEllipse(
+        x1 + Math.round(width / 2),
+        y1 + Math.round(height / 2),
+        Math.round(width / 2),
+        Math.round(height / 2),
+      );
+    }
+    if (shape === 'line') {
+      const x2 = stage.mouseX < startX ? x1 : x1 + width;
+      const y2 = stage.mouseY > startY ? y1 : y1 + height;
+      const x = Math.round(xToLeft(startX, 0) / brickSize);
+      const y = Math.round(yToTop(startY, 0) / brickSize);
+
+      if (stage.mouseX < startX) {
+        legraLine(x, y, x2, y2);
+      } else {
+        legraLine(x2, y2, x, y);
+      }
+    }
+    drawing = false;
+  }
+});
+
+stage.whenEvent('mousemove', () => {
+  if (drawing) {
+    sprite.costume.width = Math.abs(stage.mouseX - startX) * 2;
+    sprite.costume.height = Math.abs(stage.mouseY - startY) * 2;
+  } else {
+    sprite.costume.width = 2;
+    sprite.costume.height = 2;
+  }
+  sprite.refresh();
+  shape !== 'line' ? sprite.show() : sprite.hide();
+});
+
+// keys ui
+
+stage.whenEvent('keyup', () => {
+  status.inner(`${shape} ${sprite.penColor}`);
+});
+
+stage.whenKeyPressed('1', () => {
+  shape = 'line';
+});
+
+stage.whenKeyPressed('2', () => {
+  shape = 'rect';
+});
+
+stage.whenKeyPressed('3', () => {
+  shape = 'ellipse';
+});
+
+stage.whenKeyPressed('k', () => {
+  sprite.setPenColor('black');
+});
+
+stage.whenKeyPressed('r', () => {
+  sprite.setPenColor('red');
+});
+
+stage.whenKeyPressed('g', () => {
+  sprite.setPenColor('green');
+});
+
+stage.whenKeyPressed('b', () => {
+  sprite.setPenColor('blue');
+});
+
+stage.whenKeyPressed('y', () => {
+  sprite.setPenColor('yellow');
+});
+
+stage.whenKeyPressed('c', () => {
+  sprite.setPenColor('cyan');
+});
+
+stage.whenKeyPressed('m', () => {
+  sprite.setPenColor('magenta');
+});
+
+stage.whenKeyPressed('w', () => {
+  sprite.setPenColor('white');
+});
+
+stage.whenKeyPressed('p', () => {
+  sprite.setPenColor('pink');
+});
+
+stage.whenKeyPressed(' ', () => {
+  sprite.penClear();
+  le.rectangle(
+    0, 0, Math.round(stage.width / brickSize), Math.round(stage.height / brickSize),
+    { filled: true, color: 'lightgray' },
+  );
+  status.inner(`${shape} ${sprite.penColor}`);
+});
+
+stage.whenKeyPressed('Escape', () => {
+  drawing = false;
+  sprite.hide();
+});
+
+stage.whenKeyPressed('h', () => {
+  instructions.show();
+  instruct = true;
+});
+
+  </script>
+
+</body>
+</html>
